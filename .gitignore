@@ -1,0 +1,23 @@
+.DS_Store
+.env
+.venv/
+.mypy_cache/
+.pytest_cache/
+.ruff_cache/
+__pycache__/
+*.py[cod]
+*.ses
+htmlcov/
+coverage.xml
+
+# Generated application data
+.local/
+data/source_snapshots/
+data/lancedb/
+data/financial_advisor.db
+frontend/data/financial_advisor.db
+
+# Generated frontend dependencies and build output
+frontend/node_modules/
+frontend/dist/
+frontend/.npm-cache/

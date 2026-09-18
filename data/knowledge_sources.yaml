@@ -1,0 +1,354 @@
+schema_version: 1
+
+# Stable educational sources only. Changing rules, rates, prices, and limits are
+# deliberately excluded; the Analyst must obtain those through live web research.
+sources:
+  - id: investor_gov_introduction_to_investing
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Introduction to Investing
+    url: https://www.investor.gov/introduction-investing
+    content_type: html
+    topics: [goals, time_horizon, risk, asset_allocation, diversification]
+
+  - id: investor_gov_asset_allocation_guide
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Beginners' Guide to Asset Allocation, Diversification, and Rebalancing
+    url: https://www.investor.gov/sites/investorgov/files/2019-02/Beginners-Guide-to-Asset-Allocation.pdf
+    content_type: pdf
+    topics: [risk_tolerance, time_horizon, asset_allocation, diversification, rebalancing]
+
+  - id: finra_asset_allocation_diversification
+    publisher: FINRA
+    title: Asset Allocation and Diversification
+    url: https://www.finra.org/investors/investing/investing-basics/asset-allocation-diversification
+    content_type: html
+    topics: [asset_allocation, diversification, concentration_risk, rebalancing]
+
+  - id: finra_tips_new_investors
+    publisher: FINRA
+    title: Financial Tips for New Investors
+    url: https://www.finra.org/investors/insights/tips-new-investors
+    content_type: html
+    topics: [risk, diversification, fees, investment_products]
+
+  - id: cfpb_emergency_fund
+    publisher: Consumer Financial Protection Bureau
+    title: An essential guide to building an emergency fund
+    url: https://www.consumerfinance.gov/an-essential-guide-to-building-an-emergency-fund/
+    content_type: html
+    topics: [emergency_fund, liquidity, savings]
+
+  - id: cfpb_debt_action_plan
+    publisher: Consumer Financial Protection Bureau
+    title: Debt action plan tool
+    url: https://files.consumerfinance.gov/f/documents/cfpb_your-money-your-goals_debt-action-plan_tool_2018-11.pdf
+    content_type: pdf
+    topics: [debt, repayment, debt_prioritization]
+
+  - id: investor_gov_what_is_risk
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: What is Risk?
+    url: https://www.investor.gov/introduction-investing/investing-basics/what-risk
+    content_type: html
+    topics: [risk, risk_tolerance, volatility, inflation, liquidity]
+
+  - id: finra_buying_and_selling
+    publisher: FINRA
+    title: Buying and Selling
+    url: https://www.finra.org/investors/investing/investing-basics/buying-and-selling
+    content_type: html
+    topics: [investing, trading, orders, market_orders, limit_orders]
+
+  - id: finra_evaluating_performance
+    publisher: FINRA
+    title: Evaluating Performance
+    url: https://www.finra.org/investors/investing/investing-basics/evaluating-performance
+    content_type: html
+    topics: [investing, performance, benchmarks, returns]
+
+  - id: fdic_understanding_deposit_insurance
+    publisher: Federal Deposit Insurance Corporation
+    title: Understanding Deposit Insurance
+    url: https://www.fdic.gov/resources/deposit-insurance/understanding-deposit-insurance
+    content_type: html
+    topics: [savings, deposit_insurance, bank_accounts, liquidity]
+
+  - id: fdic_deposit_accounts
+    publisher: Federal Deposit Insurance Corporation
+    title: Consumer Protections on Deposit Accounts
+    url: https://www.fdic.gov/consumer-resource-center/deposit-accounts
+    content_type: html
+    topics: [bank_accounts, savings, consumer_protection, fees]
+
+  - id: cfpb_budgeting_guide
+    publisher: Consumer Financial Protection Bureau
+    title: "Budgeting: How to create a budget and stick with it"
+    url: https://www.consumerfinance.gov/archive/blog/budgeting-how-to-create-a-budget-and-stick-with-it/
+    content_type: html
+    topics: [budgeting, spending, savings, debt]
+
+  - id: cfpb_assess_spending
+    publisher: Consumer Financial Protection Bureau
+    title: Assess your spending
+    url: https://www.consumerfinance.gov/owning-a-home/prepare/assess-your-spending/
+    content_type: html
+    topics: [budgeting, spending, savings, cash_flow]
+
+  - id: cfpb_credit_counseling
+    publisher: Consumer Financial Protection Bureau
+    title: What is credit counseling?
+    url: https://www.consumerfinance.gov/ask-cfpb/what-is-credit-counseling-en-1451/
+    content_type: html
+    topics: [debt, credit_counseling, budgeting, debt_management]
+
+  - id: investor_gov_assessing_risk_tolerance
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Assessing Your Risk Tolerance
+    url: https://www.investor.gov/introduction-investing/getting-started/assessing-your-risk-tolerance
+    content_type: html
+    topics: [risk_tolerance, goals, time_horizon]
+
+  - id: investor_gov_asset_allocation
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Asset Allocation
+    url: https://www.investor.gov/introduction-investing/getting-started/asset-allocation
+    content_type: html
+    topics: [asset_allocation, diversification, risk_tolerance]
+
+  - id: investor_gov_certificates_of_deposit
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Certificates of Deposit
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/certificates-deposit-cds
+    content_type: html
+    topics: [certificates_of_deposit, savings, liquidity, risk]
+
+  - id: investor_gov_save_and_invest
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Save and Invest
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest
+    content_type: html
+    topics: [saving, investing, goals, time_horizon]
+
+  - id: investor_gov_investment_products
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Investment Products
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products
+    content_type: html
+    topics: [investment_products, stocks, bonds, funds, risk]
+
+  - id: investor_gov_understanding_fees
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Understanding Fees
+    url: https://www.investor.gov/introduction-investing/getting-started/understanding-fees
+    content_type: html
+    topics: [fees, expenses, investing]
+
+  - id: investor_gov_stocks
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Stocks
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/stocks
+    content_type: html
+    topics: [stocks, equity, risk, investing]
+
+  - id: investor_gov_mutual_funds_etfs
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Mutual Funds and Exchange-Traded Funds
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/mutual-funds-and-exchange-traded-2
+    content_type: html
+    topics: [mutual_funds, etfs, diversification, fees]
+
+  - id: investor_gov_international_investing
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: International Investing
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/international-investing
+    content_type: html
+    topics: [international_investing, diversification, currency_risk, risk]
+
+  - id: investor_gov_five_questions_before_investing
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Five Questions to Ask Before You Invest
+    url: https://www.investor.gov/introduction-investing/getting-started/five-questions-ask-you-invest
+    content_type: html
+    topics: [due_diligence, investing, fraud_prevention, risk]
+
+  - id: investor_gov_online_investing
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Online Investing
+    url: https://www.investor.gov/introduction-investing/getting-started/investing-your-own/online-investing
+    content_type: html
+    topics: [online_investing, fraud_prevention, cybersecurity, investing]
+
+  - id: investor_gov_brokerage_accounts
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Types of Brokerage Accounts
+    url: https://www.investor.gov/introduction-investing/investing-basics/how-stock-markets-work/types-brokerage-accounts
+    content_type: html
+    topics: [brokerage_accounts, investing, account_types]
+
+  - id: investor_gov_executing_orders
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Executing an Order
+    url: https://www.investor.gov/introduction-investing/investing-basics/how-stock-markets-work/executing-order
+    content_type: html
+    topics: [trading, orders, investing]
+
+  - id: investor_gov_types_of_orders
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Types of Orders
+    url: https://www.investor.gov/introduction-investing/investing-basics/how-stock-markets-work/types-orders
+    content_type: html
+    topics: [trading, market_orders, limit_orders, risk]
+
+  - id: investor_gov_researching_investments
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Researching Investments
+    url: https://www.investor.gov/introduction-investing/getting-started/researching-investments
+    content_type: html
+    topics: [due_diligence, research, investing]
+
+  - id: investor_gov_brokers
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Brokers
+    url: https://www.investor.gov/introduction-investing/getting-started/working-investment-professional/brokers
+    content_type: html
+    topics: [brokers, financial_professionals, fees, investing]
+
+  - id: investor_gov_investment_advisers
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Investment Advisers
+    url: https://www.investor.gov/introduction-investing/getting-started/working-investment-professional/investment-advisers
+    content_type: html
+    topics: [investment_advisers, financial_professionals, fees, investing]
+
+  - id: investor_gov_direct_investing
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Direct Investing
+    url: https://www.investor.gov/introduction-investing/getting-started/investing-your-own/direct-investing
+    content_type: html
+    topics: [direct_investing, stocks, investing, risk]
+
+  - id: investor_gov_how_stock_markets_work
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: How Stock Markets Work
+    url: https://www.investor.gov/introduction-investing/investing-basics/how-stock-markets-work
+    content_type: html
+    topics: [stock_markets, stocks, trading, investing]
+
+  - id: investor_gov_public_companies
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Public Companies
+    url: https://www.investor.gov/introduction-investing/investing-basics/how-stock-markets-work/public-companies
+    content_type: html
+    topics: [public_companies, stocks, disclosures, investing]
+
+  - id: investor_gov_bonds_fixed_income
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Bonds and Fixed Income Products
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/bonds-or-fixed-income-products
+    content_type: html
+    topics: [bonds, fixed_income, interest_rate_risk, risk]
+
+  - id: investor_gov_bonds
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Bonds
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/bonds-or-fixed-income-products/bonds
+    content_type: html
+    topics: [bonds, fixed_income, credit_risk, interest_rate_risk]
+
+  - id: investor_gov_mutual_funds
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Mutual Funds
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/mutual-funds-and-exchange-traded-funds-etfs/mutual-funds
+    content_type: html
+    topics: [mutual_funds, diversification, fees, investing]
+
+  - id: investor_gov_reits
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Real Estate Investment Trusts
+    url: https://www.investor.gov/introduction-investing/investing-basics/investment-products/real-estate-investment-trusts-reits
+    content_type: html
+    topics: [reits, investment_products, risk, diversification]
+
+  - id: investor_gov_gauge_risk_tolerance
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Gauge Your Risk Tolerance
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/gauge-your-risk-tolerance
+    content_type: html
+    topics: [risk_tolerance, goals, time_horizon]
+
+  - id: investor_gov_diversify_investments
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Diversify Your Investments
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/diversify-your-investments
+    content_type: html
+    topics: [diversification, concentration_risk, asset_allocation]
+
+  - id: investor_gov_figure_out_finances
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Figure Out Your Finances
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/figure-out-your-finances
+    content_type: html
+    topics: [budgeting, goals, debt, saving]
+
+  - id: investor_gov_small_savings
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Small Savings Add Up to Big Money
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/small-savings-add-big-money
+    content_type: html
+    topics: [saving, compounding, goals]
+
+  - id: investor_gov_pay_high_interest_debt
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Pay Credit Cards or Other High Interest Debt
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/pay-credit-cards-or-other-high-interest
+    content_type: html
+    topics: [debt, high_interest_debt, repayment, saving]
+
+  - id: investor_gov_learn_investment_options
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Learn About Investment Options
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/learn-about-investment-options
+    content_type: html
+    topics: [investment_products, risk, investing]
+
+  - id: investor_gov_save_rainy_day
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Save for a Rainy Day
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/save-rainy-day
+    content_type: html
+    topics: [emergency_fund, saving, liquidity]
+
+  - id: investor_gov_define_goals
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Define Your Goals
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/define-your-goals
+    content_type: html
+    topics: [goals, time_horizon, saving, investing]
+
+  - id: investor_gov_understand_investing
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Understand What It Means to Invest
+    url: https://www.investor.gov/introduction-investing/investing-basics/save-and-invest/understand-what-it-means-invest
+    content_type: html
+    topics: [investing, saving, risk, goals]
+
+  - id: investor_gov_check_investment_professional
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Check Out Your Investment Professional
+    url: https://www.investor.gov/introduction-investing/getting-started/working-investment-professional/check-out-your-investment-professional
+    content_type: html
+    topics: [financial_professionals, due_diligence, fraud_prevention]
+
+  - id: investor_gov_using_edgar
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Using EDGAR to Research Investments
+    url: https://www.investor.gov/introduction-investing/getting-started/researching-investments/using-edgar-research-investments
+    content_type: html
+    topics: [due_diligence, disclosures, research, investing]
+
+  - id: investor_gov_ask_and_check
+    publisher: U.S. Securities and Exchange Commission — Investor.gov
+    title: Ask and Check
+    url: https://www.investor.gov/introduction-investing/getting-started/researching-investments/ask-and-check
+    content_type: html
+    topics: [due_diligence, fraud_prevention, research]
