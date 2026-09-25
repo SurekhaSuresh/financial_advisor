@@ -1,1 +1,1 @@
-"""Financial Advisor application package."""
+"""Financial Advisor multi-agent application."""

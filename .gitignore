@@ -21,3 +21,6 @@ frontend/data/financial_advisor.db
 frontend/node_modules/
 frontend/dist/
 frontend/.npm-cache/
+old/frontend/node_modules/
+old/frontend/dist/
+old/frontend/.npm-cache/
