@@ -5,10 +5,12 @@ from google.adk.agents import LlmAgent
 from financial_advisor.config import MAX_CLIENT_FOLLOW_UPS
 from financial_advisor.contracts import ClientResult, ClientTask
 
+LATEST_CLIENT_RESULT_STATE_KEY = "latest_client_result"
+
 CLIENT_INSTRUCTION = f"""You are the simulated Client in a financial-planning exercise.
 You interact only with the Advisor.
 
-Your input is one ClientTask containing your profile, an optional Advisor response,
+Your input is one ClientTask containing client_profile, an optional Advisor response,
 and the number of follow-up questions already asked.
 
 If advisor_response is absent:
@@ -41,4 +43,5 @@ def create_client_agent(model: str) -> LlmAgent:
         instruction=CLIENT_INSTRUCTION,
         input_schema=ClientTask,
         output_schema=ClientResult,
+        output_key=LATEST_CLIENT_RESULT_STATE_KEY,
     )

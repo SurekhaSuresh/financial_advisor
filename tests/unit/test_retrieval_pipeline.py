@@ -56,10 +56,9 @@ def test_pipeline_executes_only_advisor_selected_paths() -> None:
     knowledge = Knowledge()
     web = Web()
     pipeline = RetrievalPipeline(
-        curated_knowledge_retriever=cast(Any, knowledge),
+        local_hybrid_retriever=cast(Any, knowledge),
         web_candidate_retriever=cast(Any, web),
         rerank=lambda _query, documents: [float(index) for index, _ in enumerate(documents)],
-        embed=lambda _texts: [],
     )
 
     result = pipeline.retrieve(
@@ -75,10 +74,9 @@ def test_pipeline_executes_only_advisor_selected_paths() -> None:
 
 def test_pipeline_jointly_selects_local_and_web_with_stable_evidence_ids() -> None:
     pipeline = RetrievalPipeline(
-        curated_knowledge_retriever=cast(Any, Knowledge()),
+        local_hybrid_retriever=cast(Any, Knowledge()),
         web_candidate_retriever=cast(Any, Web()),
         rerank=lambda _query, documents: [float("web" in text) for text in documents],
-        embed=lambda _texts: [],
     )
     paths = [RetrievalPath.LOCAL_HYBRID, RetrievalPath.WEB]
 

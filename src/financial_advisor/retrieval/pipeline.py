@@ -6,13 +6,14 @@ from uuid import NAMESPACE_URL, uuid5
 from financial_advisor.config import DEFAULT_EVIDENCE_LIMIT, MAX_EVIDENCE_TEXT_LENGTH
 from financial_advisor.contracts import (
     Evidence,
+    Rerank,
     RetrievalPath,
     RetrievalResult,
     RetrievedEvidenceCandidate,
 )
-from financial_advisor.retrieval.knowledge import CuratedKnowledgeRetriever
-from financial_advisor.retrieval.ranking import Embed, Rerank, select_candidates
-from financial_advisor.retrieval.web import WebCandidateRetriever
+from financial_advisor.retrieval.knowledge_base.hybrid_search import LocalHybridRetriever
+from financial_advisor.retrieval.ranking import select_evidence_candidates
+from financial_advisor.retrieval.web.web_search import WebCandidateRetriever
 
 
 class RetrievalPipeline:
@@ -20,19 +21,17 @@ class RetrievalPipeline:
 
     def __init__(
         self,
-        curated_knowledge_retriever: CuratedKnowledgeRetriever,
+        local_hybrid_retriever: LocalHybridRetriever,
         rerank: Rerank,
-        embed: Embed,
         web_candidate_retriever: WebCandidateRetriever | None = None,
         *,
         evidence_limit: int = DEFAULT_EVIDENCE_LIMIT,
     ) -> None:
         if evidence_limit <= 0:
             raise ValueError("Evidence limit must be positive.")
-        self.curated_knowledge_retriever = curated_knowledge_retriever
+        self.local_hybrid_retriever = local_hybrid_retriever
         self.web_candidate_retriever = web_candidate_retriever
         self.rerank = rerank
-        self.embed = embed
         self.evidence_limit = evidence_limit
 
     def retrieve(
@@ -48,7 +47,7 @@ class RetrievalPipeline:
         candidates: list[RetrievedEvidenceCandidate] = []
         limitations: list[str] = []
         if RetrievalPath.LOCAL_HYBRID in paths:
-            local_candidates = self.curated_knowledge_retriever.search(query)
+            local_candidates = self.local_hybrid_retriever.search(query)
             candidates.extend(local_candidates)
             if not local_candidates:
                 limitations.append("The local knowledge store returned no usable evidence.")
@@ -61,11 +60,10 @@ class RetrievalPipeline:
                 candidates.extend(web_candidates)
                 limitations.extend(web_limitations)
 
-        selected_candidates = select_candidates(
+        selected_candidates = select_evidence_candidates(
             query,
             candidates,
             self.rerank,
-            self.embed,
             limit=self.evidence_limit,
         )
         if not selected_candidates:

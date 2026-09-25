@@ -1,14 +1,14 @@
 import pytest
 
-import financial_advisor.retrieval.web as web_module
+import financial_advisor.retrieval.web.web_search as web_module
 from financial_advisor.contracts import RetrievalChannel
-from financial_advisor.retrieval.providers import (
+from financial_advisor.retrieval.web.page_fetch import FetchedWebDocument
+from financial_advisor.retrieval.web.providers import (
     WebError,
     WebResult,
     validate_url,
 )
-from financial_advisor.retrieval.web import WebCandidateRetriever
-from financial_advisor.retrieval.web_fetch import WebDocument
+from financial_advisor.retrieval.web.web_search import WebCandidateRetriever
 
 
 def encode(text: str) -> list[int]:
@@ -50,7 +50,7 @@ def test_web_candidate_retriever_fails_over_and_ranks_fetched_page_content(
     monkeypatch.setattr(
         retriever.page_fetcher,
         "fetch",
-        lambda _result: WebDocument(
+        lambda _result: FetchedWebDocument(
             "Current guidance",
             "https://www.investor.gov/current",
             "text/html",
@@ -115,7 +115,7 @@ def _retriever_with_fetched_page(
     monkeypatch.setattr(
         retriever.page_fetcher,
         "fetch",
-        lambda result: WebDocument(
+        lambda result: FetchedWebDocument(
             result.title,
             result.url,
             "text/html",

@@ -1,6 +1,5 @@
 """Hybrid vector and BM25 search over the curated LanceDB store."""
 
-from collections.abc import Callable, Sequence
 from pathlib import Path
 
 import lancedb
@@ -9,12 +8,10 @@ from financial_advisor.config import (
     DEFAULT_KNOWLEDGE_CANDIDATE_LIMIT,
     KNOWLEDGE_TABLE_NAME,
 )
-from financial_advisor.contracts import RetrievalChannel, RetrievedEvidenceCandidate
-
-Embed = Callable[[Sequence[str]], list[list[float]]]
+from financial_advisor.contracts import Embed, RetrievalChannel, RetrievedEvidenceCandidate
 
 
-class CuratedKnowledgeRetriever:
+class LocalHybridRetriever:
     """Retrieve evidence candidates from the curated local knowledge store."""
 
     def __init__(

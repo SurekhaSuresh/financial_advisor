@@ -1,6 +1,6 @@
 """Deterministic ranking stages shared by local and web retrieval."""
 
-from collections.abc import Callable, Sequence
+from collections.abc import Sequence
 from math import sqrt
 
 from financial_advisor.config import (
@@ -8,15 +8,18 @@ from financial_advisor.config import (
     DEFAULT_MMR_RELEVANCE_WEIGHT,
     DEFAULT_RRF_RANK_CONSTANT,
 )
-from financial_advisor.contracts import RetrievalChannel, RetrievedEvidenceCandidate
+from financial_advisor.contracts import (
+    Rerank,
+    RetrievalChannel,
+    RetrievedEvidenceCandidate,
+)
 
-Embed = Callable[[Sequence[str]], list[list[float]]]
-Rerank = Callable[[str, Sequence[str]], list[float]]
-ScoredCandidate = tuple[RetrievedEvidenceCandidate, float]
+RerankedCandidate = tuple[RetrievedEvidenceCandidate, float]
+ChannelCandidates = dict[RetrievalChannel, RetrievedEvidenceCandidate]
 
 
 def reciprocal_rank_fusion(
-    candidates: Sequence[RetrievedEvidenceCandidate],
+    retrieved_candidates: Sequence[RetrievedEvidenceCandidate],
     *,
     rank_constant: int = DEFAULT_RRF_RANK_CONSTANT,
 ) -> list[RetrievedEvidenceCandidate]:
@@ -25,103 +28,130 @@ def reciprocal_rank_fusion(
     if rank_constant <= 0:
         raise ValueError("RRF rank constant must be positive.")
 
-    candidates_by_canonical_id: dict[
-        str,
-        dict[RetrievalChannel, RetrievedEvidenceCandidate],
-    ] = {}
-    for candidate in candidates:
-        channel_candidates = candidates_by_canonical_id.setdefault(
-            candidate.canonical_candidate_id,
+    candidates_by_source = _deduplicate_candidates_within_channels(retrieved_candidates)
+    scored_fused_candidates: list[tuple[RetrievedEvidenceCandidate, float]] = []
+    for candidates_by_channel in candidates_by_source.values():
+        vector_candidate = candidates_by_channel.get(RetrievalChannel.VECTOR)
+        keyword_candidate = candidates_by_channel.get(RetrievalChannel.KEYWORD)
+        fused_candidate = vector_candidate or next(iter(candidates_by_channel.values()))
+
+        if keyword_candidate is not None:
+            fused_candidate = fused_candidate.model_copy(
+                update={"bm25_score": keyword_candidate.bm25_score}
+            )
+
+        rrf_score = sum(
+            1 / (rank_constant + candidate.rank)
+            for candidate in candidates_by_channel.values()
+        )
+        scored_fused_candidates.append((fused_candidate, rrf_score))
+
+    scored_fused_candidates.sort(
+        key=lambda item: (-item[1], item[0].canonical_candidate_id)
+    )
+    return [candidate for candidate, _score in scored_fused_candidates]
+
+
+def _deduplicate_candidates_within_channels(
+    retrieved_candidates: Sequence[RetrievedEvidenceCandidate],
+) -> dict[str, ChannelCandidates]:
+    """Group matching sources, keeping only the best duplicate per channel."""
+
+    candidates_by_source: dict[str, ChannelCandidates] = {}
+    for retrieved_candidate in retrieved_candidates:
+        candidates_by_channel = candidates_by_source.setdefault(
+            retrieved_candidate.canonical_candidate_id,
             {},
         )
-        current = channel_candidates.get(candidate.retrieval_channel)
-        if current is None or candidate.rank < current.rank:
-            channel_candidates[candidate.retrieval_channel] = candidate
-
-    fused_candidates: list[tuple[RetrievedEvidenceCandidate, float]] = []
-    for channel_candidates in candidates_by_canonical_id.values():
-        representative = max(
-            channel_candidates.values(),
-            key=lambda candidate: candidate.retrieval_channel is RetrievalChannel.VECTOR,
+        existing_candidate_for_channel = candidates_by_channel.get(
+            retrieved_candidate.retrieval_channel
         )
-        vector_candidate = channel_candidates.get(RetrievalChannel.VECTOR)
-        keyword_candidate = channel_candidates.get(RetrievalChannel.KEYWORD)
-        retrieval_scores: dict[str, float | None] = {}
-        if vector_candidate is not None:
-            retrieval_scores["cosine_distance"] = vector_candidate.cosine_distance
-        if keyword_candidate is not None:
-            retrieval_scores["bm25_score"] = keyword_candidate.bm25_score
-        representative = representative.model_copy(update=retrieval_scores)
-        rrf_score = sum(
-            1 / (rank_constant + candidate.rank) for candidate in channel_candidates.values()
-        )
-        fused_candidates.append((representative, rrf_score))
-
-    fused_candidates.sort(key=lambda item: (-item[1], item[0].canonical_candidate_id))
-    return [candidate for candidate, _score in fused_candidates]
+        if (
+            existing_candidate_for_channel is None
+            or retrieved_candidate.rank < existing_candidate_for_channel.rank
+        ):
+            candidates_by_channel[retrieved_candidate.retrieval_channel] = retrieved_candidate
+    return candidates_by_source
 
 
 def rerank_candidates(
     query: str,
-    candidates: Sequence[RetrievedEvidenceCandidate],
+    fused_candidates: Sequence[RetrievedEvidenceCandidate],
     rerank: Rerank,
-) -> list[ScoredCandidate]:
+) -> list[RerankedCandidate]:
     """Order fused candidates by cross-encoder relevance."""
 
-    if not candidates:
+    if not fused_candidates:
         return []
-    relevance_scores = rerank(query, [candidate.text for candidate in candidates])
-    if len(relevance_scores) != len(candidates):
+    relevance_scores = rerank(query, [candidate.text for candidate in fused_candidates])
+    if len(relevance_scores) != len(fused_candidates):
         raise ValueError("Reranker must return one score per candidate.")
 
-    ranked_candidates = list(zip(candidates, relevance_scores, strict=True))
-    ranked_candidates.sort(key=lambda item: (-item[1], item[0].canonical_candidate_id))
-    return ranked_candidates
+    reranked_candidates = list(zip(fused_candidates, relevance_scores, strict=True))
+    reranked_candidates.sort(key=lambda item: (-item[1], item[0].canonical_candidate_id))
+    return reranked_candidates
 
 
-def select_diverse_candidates(
-    ranked_candidates: Sequence[ScoredCandidate],
-    embed: Embed,
+def select_candidates_with_mmr(
+    reranked_candidates: Sequence[RerankedCandidate],
     *,
-    limit: int = DEFAULT_EVIDENCE_LIMIT,
+    selection_limit: int = DEFAULT_EVIDENCE_LIMIT,
     relevance_weight: float = DEFAULT_MMR_RELEVANCE_WEIGHT,
 ) -> list[RetrievedEvidenceCandidate]:
     """Use maximal marginal relevance to avoid redundant final evidence."""
 
-    if limit <= 0 or not 0 <= relevance_weight <= 1:
-        raise ValueError("Invalid MMR selection arguments.")
-    if not ranked_candidates:
+    if selection_limit <= 0:
+        raise ValueError("MMR candidate limit must be positive.")
+    if not 0 <= relevance_weight <= 1:
+        raise ValueError("MMR relevance weight must be between zero and one.")
+    if not reranked_candidates:
         return []
 
-    candidates = [candidate for candidate, _score in ranked_candidates]
-    relevance = _normalize([score for _candidate, score in ranked_candidates])
-    vectors = _candidate_vectors(candidates, embed)
+    evidence_candidates = [candidate for candidate, _score in reranked_candidates]
+    relevance_scores = [score for _candidate, score in reranked_candidates]
+    minimum_score = min(relevance_scores)
+    score_range = max(relevance_scores) - minimum_score
+    normalized_relevance_scores = [
+        1.0 if score_range == 0 else (score - minimum_score) / score_range
+        for score in relevance_scores
+    ]
+    candidate_vectors = [candidate.vector for candidate in evidence_candidates]
 
     selected_indices: list[int] = []
-    remaining_indices = set(range(len(candidates)))
-    while remaining_indices and len(selected_indices) < limit:
-        selected_vectors = [vectors[index] for index in selected_indices]
-        winner = min(
+    remaining_indices = set(range(len(evidence_candidates)))
+    maximum_similarities = [0.0] * len(evidence_candidates)
+    while remaining_indices and len(selected_indices) < selection_limit:
+        mmr_scores = {
+            index: (
+                relevance_weight * normalized_relevance_scores[index]
+                - (1 - relevance_weight) * maximum_similarities[index]
+            )
+            for index in remaining_indices
+        }
+        selected_index = max(
             remaining_indices,
-            key=lambda index: (
-                -(
-                    relevance_weight * relevance[index]
-                    - (1 - relevance_weight) * _maximum_similarity(vectors[index], selected_vectors)
-                ),
-                index,
-                candidates[index].canonical_candidate_id,
-            ),
+            key=lambda index: (mmr_scores[index], -index),
         )
-        selected_indices.append(winner)
-        remaining_indices.remove(winner)
-    return [candidates[index] for index in selected_indices]
+        selected_indices.append(selected_index)
+        remaining_indices.remove(selected_index)
+
+        selected_vector = candidate_vectors[selected_index]
+        for candidate_index in remaining_indices:
+            similarity = cosine_similarity(
+                candidate_vectors[candidate_index],
+                selected_vector,
+            )
+            maximum_similarities[candidate_index] = max(
+                maximum_similarities[candidate_index],
+                similarity,
+            )
+    return [evidence_candidates[index] for index in selected_indices]
 
 
-def select_candidates(
+def select_evidence_candidates(
     query: str,
-    candidates: Sequence[RetrievedEvidenceCandidate],
+    retrieved_candidates: Sequence[RetrievedEvidenceCandidate],
     rerank: Rerank,
-    embed: Embed,
     *,
     limit: int = DEFAULT_EVIDENCE_LIMIT,
     rank_constant: int = DEFAULT_RRF_RANK_CONSTANT,
@@ -132,12 +162,14 @@ def select_candidates(
     query = query.strip()
     if not query:
         raise ValueError("Evidence-selection query must not be blank.")
-    fused = reciprocal_rank_fusion(candidates, rank_constant=rank_constant)
-    reranked = rerank_candidates(query, fused, rerank)
-    return select_diverse_candidates(
-        reranked,
-        embed,
-        limit=limit,
+    fused_candidates = reciprocal_rank_fusion(
+        retrieved_candidates,
+        rank_constant=rank_constant,
+    )
+    reranked_candidates = rerank_candidates(query, fused_candidates, rerank)
+    return select_candidates_with_mmr(
+        reranked_candidates,
+        selection_limit=limit,
         relevance_weight=relevance_weight,
     )
 
@@ -151,41 +183,8 @@ def cosine_similarity(left: Sequence[float], right: Sequence[float]) -> float:
     right_size = sqrt(sum(value * value for value in right))
     if left_size == 0 or right_size == 0:
         raise ValueError("Candidate vectors must not be zero vectors.")
-    return sum(a * b for a, b in zip(left, right, strict=True)) / (left_size * right_size)
-
-
-def _candidate_vectors(
-    candidates: Sequence[RetrievedEvidenceCandidate],
-    embed: Embed,
-) -> list[list[float]]:
-    vectors = [candidate.vector for candidate in candidates]
-    missing_indices = [index for index, vector in enumerate(vectors) if vector is None]
-    if missing_indices:
-        generated_vectors = embed([candidates[index].embedding_text for index in missing_indices])
-        if len(generated_vectors) != len(missing_indices):
-            raise ValueError("Embedder must return one vector per candidate.")
-        for index, vector in zip(missing_indices, generated_vectors, strict=True):
-            vectors[index] = vector
-    return [vector for vector in vectors if vector is not None]
-
-
-def _normalize(scores: Sequence[float]) -> list[float]:
-    minimum, maximum = min(scores), max(scores)
-    if minimum == maximum:
-        return [1.0] * len(scores)
-    return [(score - minimum) / (maximum - minimum) for score in scores]
-
-
-def _maximum_similarity(
-    candidate_vector: Sequence[float],
-    selected_vectors: Sequence[Sequence[float]],
-) -> float:
-    if not selected_vectors:
-        return 0.0
-    return max(
-        0.0,
-        max(
-            cosine_similarity(candidate_vector, selected_vector)
-            for selected_vector in selected_vectors
-        ),
+    dot_product = sum(
+        left_value * right_value
+        for left_value, right_value in zip(left, right, strict=True)
     )
+    return dot_product / (left_size * right_size)

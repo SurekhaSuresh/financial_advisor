@@ -9,21 +9,28 @@ Client and Analyst through `AgentTool`; those agents never call each other.
 
 ```text
 src/financial_advisor/
-├── models.py          shared agent contracts and trusted result creation
+├── contracts.py       shared data contracts
+├── config.py          application and retrieval settings
 ├── agents/
-    ├── client.py      Client AgentTool target
-    └── analyst.py     Analyst AgentTool target with pre-model retrieval
+│   ├── advisor/
+│   │   ├── agent.py   root agent and deterministic recommendation finalization
+│   │   └── prompt.py  Advisor instructions
+│   ├── analyst/
+│   │   ├── agent.py   Analyst AgentTool target with pre-model retrieval
+│   │   └── prompt.py  Analyst instructions
+│   └── client.py      Client AgentTool target and instructions
 └── retrieval/
-    ├── models.py       two small retrieval contracts
-    ├── documents.py    HTML/PDF parsing and token chunking
-    ├── knowledge.py    LanceDB vector and BM25 search
-    ├── providers.py    web discovery, failover, and URL policy
-    ├── web_fetch.py    bounded original-page fetching
-    ├── web.py          web page processing and passage ranking
-    ├── ranking.py      separate RRF, reranking, and MMR stages
+    ├── content_processing.py  shared HTML/PDF parsing and token chunking
+    ├── ranking.py      shared RRF, reranking, and MMR stages
     ├── pipeline.py     executes the Advisor-selected retrieval paths
-    ├── local_models.py local embedding, tokenizer, and reranker
-    └── ingestion.py    offline knowledge-store build
+    ├── text_models.py  local embedding, tokenizer, and reranker
+    ├── knowledge_base/
+    │   ├── hybrid_search.py      LanceDB vector and BM25 search
+    │   └── offline_ingestion.py  offline knowledge-store build
+    └── web/
+        ├── providers.py   discovery, failover, and URL policy
+        ├── page_fetch.py  bounded original-page fetching
+        └── web_search.py  web page processing and passage ranking
 
 tests/unit/
 ├── test_models.py

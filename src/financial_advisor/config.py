@@ -2,6 +2,8 @@
 
 # Agent policy
 MAX_CLIENT_FOLLOW_UPS = 2
+MAX_RESEARCH_ATTEMPTS = 2
+MAX_INVOCATION_LLM_CALLS = 30
 
 # Local model defaults
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"

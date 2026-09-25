@@ -5,10 +5,10 @@ from lancedb.index import FTS
 
 from financial_advisor.config import KNOWLEDGE_TEXT_INDEX_NAME
 from financial_advisor.contracts import RetrievalChannel
-from financial_advisor.retrieval.knowledge import CuratedKnowledgeRetriever
+from financial_advisor.retrieval.knowledge_base.hybrid_search import LocalHybridRetriever
 
 
-def test_curated_knowledge_retriever_returns_both_candidate_channels(
+def test_local_hybrid_retriever_returns_both_candidate_channels(
     tmp_path: Path,
 ) -> None:
     knowledge_table = lancedb.connect(str(tmp_path)).create_table(
@@ -51,7 +51,7 @@ def test_curated_knowledge_retriever_returns_both_candidate_channels(
         config=FTS(stem=True, remove_stop_words=True),
         name=KNOWLEDGE_TEXT_INDEX_NAME,
     )
-    retriever = CuratedKnowledgeRetriever(
+    retriever = LocalHybridRetriever(
         tmp_path,
         embed=lambda _texts: [[1.0, 0.0]],
         candidate_limit=2,

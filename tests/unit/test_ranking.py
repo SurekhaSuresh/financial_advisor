@@ -2,7 +2,7 @@ from financial_advisor.contracts import RetrievalChannel, RetrievedEvidenceCandi
 from financial_advisor.retrieval.ranking import (
     reciprocal_rank_fusion,
     rerank_candidates,
-    select_candidates,
+    select_evidence_candidates,
 )
 
 
@@ -46,11 +46,10 @@ def test_selection_fuses_duplicate_channels_then_keeps_diverse_evidence() -> Non
         candidate("risk", RetrievalChannel.WEB, 2, "risk", [0.0, 1.0]),
     ]
 
-    selected = select_candidates(
+    selected = select_evidence_candidates(
         "planning",
         candidates,
         rerank=lambda _query, documents: [1.0, 0.95, 0.9][: len(documents)],
-        embed=lambda _texts: [],
         limit=2,
         relevance_weight=0.5,
     )
@@ -81,15 +80,29 @@ def test_ranking_stages_are_independently_readable() -> None:
     ]
 
 
+def test_rrf_fuses_vector_keyword_and_web_ranks_for_the_same_source() -> None:
+    candidates = [
+        candidate("shared", RetrievalChannel.VECTOR, 100, "shared", [1.0, 0.0]),
+        candidate("shared", RetrievalChannel.KEYWORD, 100, "shared", [1.0, 0.0]),
+        candidate("shared", RetrievalChannel.WEB, 100, "shared", [1.0, 0.0]),
+        candidate("other", RetrievalChannel.VECTOR, 1, "other", [0.0, 1.0]),
+    ]
+
+    fused = reciprocal_rank_fusion(candidates)
+
+    assert [item.canonical_candidate_id for item in fused] == ["shared", "other"]
+    assert fused[0].retrieval_channel is RetrievalChannel.VECTOR
+    assert fused[0].bm25_score == 2.0
+
+
 def test_selection_rejects_incomplete_reranker_output() -> None:
     item = candidate("cash", RetrievalChannel.VECTOR, 1, "cash", [1.0, 0.0])
 
     try:
-        select_candidates(
+        select_evidence_candidates(
             "planning",
             [item],
             rerank=lambda _query, _documents: [],
-            embed=lambda _texts: [],
         )
     except ValueError as error:
         assert "one score per candidate" in str(error)

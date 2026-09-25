@@ -2,21 +2,47 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Callable, Sequence
 from decimal import Decimal
 from enum import StrEnum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from pydantic import BaseModel, Field, HttpUrl, model_validator
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 from financial_advisor.config import MAX_EVIDENCE_TEXT_LENGTH
 
+Embed = Callable[[Sequence[str]], list[list[float]]]
+Rerank = Callable[[str, Sequence[str]], list[float]]
 
-def _uses_available_evidence(referenced_ids: Iterable[UUID], available_ids: set[UUID]) -> bool:
-    """Return whether every referenced evidence ID is available."""
 
-    return set(referenced_ids).issubset(available_ids)
+class ParsedDocumentSection(BaseModel):
+    """One document section before token chunking."""
+
+    heading_path: tuple[str, ...]
+    text: str
+
+
+class DocumentChunk(BaseModel):
+    """One source passage with the metadata required by retrieval."""
+
+    chunk_id: str
+    canonical_candidate_id: str
+    source_id: str
+    source_title: str
+    publisher: str
+    source_url: str
+    topics: tuple[str, ...]
+    heading_path: tuple[str, ...]
+    section_position: int
+    chunk_position: int
+    token_count: int
+    text: str
+
+    @property
+    def embedding_text(self) -> str:
+        section_heading = " > ".join(self.heading_path)
+        return f"Source: {self.source_title}\nSection: {section_heading}\n\n{self.text}"
 
 
 class ClientProfile(BaseModel):
@@ -72,7 +98,7 @@ class RetrievedEvidenceCandidate(BaseModel):
     rank: int = Field(ge=1)
     cosine_distance: float | None = Field(default=None, ge=0)
     bm25_score: float | None = None
-    vector: list[float] | None = Field(default=None, exclude=True)
+    vector: list[float] = Field(min_length=1, exclude=True)
 
     @property
     def embedding_text(self) -> str:
@@ -128,26 +154,24 @@ class RetrievalPath(StrEnum):
 
 
 class ResearchTask(BaseModel):
-    """A bounded initial or refinement task created by the Advisor."""
+    """One complete research request created by the Advisor."""
 
     task_id: UUID = Field(default_factory=uuid4)
     question: str = Field(min_length=1, max_length=2_000)
     client_profile: ClientProfile
     retrieval_paths: list[RetrievalPath] = Field(min_length=1, max_length=2)
-    previous_brief: ResearchBrief | None = None
-    material_gaps: list[str] = Field(default_factory=list)
 
-    @model_validator(mode="after")
-    def validate_refinement(self) -> ResearchTask:
-        """Keep initial research and refinement inputs unambiguous."""
+    @field_validator("retrieval_paths")
+    @classmethod
+    def require_unique_retrieval_paths(
+        cls,
+        retrieval_paths: list[RetrievalPath],
+    ) -> list[RetrievalPath]:
+        """Prevent the same retrieval path from running twice."""
 
-        if self.previous_brief is None and self.material_gaps:
-            raise ValueError("Material gaps require a previous research brief.")
-        if self.previous_brief is not None and not self.material_gaps:
-            raise ValueError("A refinement requires at least one material gap.")
-        if len(self.retrieval_paths) != len(set(self.retrieval_paths)):
+        if len(retrieval_paths) != len(set(retrieval_paths)):
             raise ValueError("A research task may select each retrieval path only once.")
-        return self
+        return retrieval_paths
 
 
 class CitedText(BaseModel):
@@ -189,7 +213,7 @@ class Recommendation(BaseModel):
 class ClientTask(BaseModel):
     """One opening or recommendation-review request sent by the Advisor."""
 
-    profile: ClientProfile
+    client_profile: ClientProfile
     advisor_response: Recommendation | None = None
     follow_up_count: int = Field(default=0, ge=0)
 
@@ -206,84 +230,3 @@ class ClientResult(BaseModel):
 
     action: ClientAction
     message: str = Field(min_length=1, max_length=2_000)
-
-
-def create_research_brief(
-    task: ResearchTask,
-    findings: list[Finding],
-    scenario_comparisons: list[ScenarioComparison],
-    evidence: list[Evidence],
-    limitations: list[str],
-) -> ResearchBrief:
-    """Keep supported Analyst claims and assemble one trusted brief."""
-
-    available_ids = {item.evidence_id for item in evidence}
-    supported_findings = [
-        finding
-        for finding in findings
-        if _uses_available_evidence(finding.evidence_ids, available_ids)
-    ]
-    if not supported_findings:
-        raise ValueError("Research produced no supported findings.")
-
-    supported_comparisons = [
-        comparison
-        for comparison in scenario_comparisons
-        if _uses_available_evidence(comparison.evidence_ids, available_ids)
-    ]
-    return ResearchBrief(
-        task_id=task.task_id,
-        findings=supported_findings,
-        scenario_comparisons=supported_comparisons,
-        evidence=evidence,
-        limitations=limitations,
-    )
-
-
-def create_recommendation(
-    brief: ResearchBrief,
-    summary: CitedText,
-    options: list[RecommendationOption],
-    assumptions: list[str],
-    risks: list[CitedText],
-    next_steps: list[str],
-) -> Recommendation:
-    """Keep supported Advisor claims and attach server-created citations."""
-
-    evidence_by_id = {item.evidence_id: item for item in brief.evidence}
-    available_ids = set(evidence_by_id)
-    if not _uses_available_evidence(summary.evidence_ids, available_ids):
-        raise ValueError("Recommendation summary is not supported by the research brief.")
-
-    supported_options = [
-        option
-        for option in options
-        if _uses_available_evidence(option.description.evidence_ids, available_ids)
-    ]
-    supported_risks = [
-        risk for risk in risks if _uses_available_evidence(risk.evidence_ids, available_ids)
-    ]
-    if not supported_options or not supported_risks:
-        raise ValueError("Recommendation has no supported options or risks.")
-
-    claims = [summary, *(option.description for option in supported_options), *supported_risks]
-    cited_ids = list(
-        dict.fromkeys(evidence_id for claim in claims for evidence_id in claim.evidence_ids)
-    )
-    return Recommendation(
-        summary=summary,
-        options=supported_options,
-        assumptions=assumptions,
-        risks=supported_risks,
-        next_steps=next_steps,
-        citations=[
-            EvidenceCitation(
-                evidence_id=evidence_id,
-                title=evidence_by_id[evidence_id].title,
-                publisher=evidence_by_id[evidence_id].publisher,
-                url=evidence_by_id[evidence_id].url,
-            )
-            for evidence_id in cited_ids
-        ],
-        limitations=brief.limitations,
-    )

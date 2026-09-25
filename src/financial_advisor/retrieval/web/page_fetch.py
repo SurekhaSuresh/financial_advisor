@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from http import HTTPStatus
 from time import sleep
 from typing import Literal, cast
-from urllib.error import HTTPError, URLError
+from urllib.error import HTTPError
 from urllib.request import Request, urlopen
 
 from financial_advisor.config import (
@@ -14,17 +14,17 @@ from financial_advisor.config import (
     WEB_FETCH_RETRY_DELAY_SECONDS,
     WEB_FETCH_USER_AGENT,
 )
-from financial_advisor.retrieval.providers import WebResult, validate_url
+from financial_advisor.retrieval.web.providers import WebResult, validate_url
 
-WebContentType = Literal["text/html", "application/xhtml+xml", "application/pdf"]
-SUPPORTED_CONTENT_TYPES = frozenset({"text/html", "application/xhtml+xml", "application/pdf"})
+SupportedWebContentType = Literal["text/html", "application/xhtml+xml", "application/pdf"]
+SUPPORTED_WEB_CONTENT_TYPES = frozenset({"text/html", "application/xhtml+xml", "application/pdf"})
 
 
 @dataclass(frozen=True)
-class WebDocument:
+class FetchedWebDocument:
     title: str
     url: str
-    content_type: WebContentType
+    content_type: SupportedWebContentType
     content: bytes
 
 
@@ -42,41 +42,46 @@ class WebPageFetcher:
         self.timeout_seconds = timeout_seconds
         self.max_page_bytes = max_page_bytes
 
-    def fetch(self, result: WebResult) -> WebDocument | None:
+    def fetch(self, discovered_result: WebResult) -> FetchedWebDocument | None:
         """Return a safe supported document, or None when the page is unusable."""
 
-        for attempt_number in range(1, WEB_FETCH_ATTEMPTS + 1):
-            is_final_attempt = attempt_number == WEB_FETCH_ATTEMPTS
+        try:
+            validate_url(discovered_result.url)
+            request = Request(
+                discovered_result.url,
+                headers={"User-Agent": WEB_FETCH_USER_AGENT},
+            )
+        except ValueError:
+            return None
+
+        for attempt_index in range(WEB_FETCH_ATTEMPTS):
+            is_final_attempt = attempt_index == WEB_FETCH_ATTEMPTS - 1
             try:
-                validate_url(result.url)
-                request = Request(
-                    result.url,
-                    headers={"User-Agent": WEB_FETCH_USER_AGENT},
-                )
+                # URL policy restricts the request to HTTP/S before this call.
                 with urlopen(request, timeout=self.timeout_seconds) as response:  # noqa: S310
-                    content_type = response.headers.get_content_type().lower()
-                    content_length = response.headers.get("Content-Length")
-                    final_url = response.geturl()
-                    validate_url(final_url)
-                    if content_type not in SUPPORTED_CONTENT_TYPES:
+                    response_content_type = response.headers.get_content_type().lower()
+                    declared_content_length = response.headers.get("Content-Length")
+                    response_url = response.geturl()
+                    validate_url(response_url)
+                    if response_content_type not in SUPPORTED_WEB_CONTENT_TYPES:
                         return None
                     # Avoid downloading a body already declared larger than the limit.
                     if (
-                        content_length
-                        and content_length.isdigit()
-                        and int(content_length) > self.max_page_bytes
+                        declared_content_length
+                        and declared_content_length.isdigit()
+                        and int(declared_content_length) > self.max_page_bytes
                     ):
                         return None
                     # Reading one extra byte detects an oversized response without
                     # loading the rest of it into memory.
-                    content = response.read(self.max_page_bytes + 1)
-                if len(content) > self.max_page_bytes:
+                    page_content = response.read(self.max_page_bytes + 1)
+                if len(page_content) > self.max_page_bytes:
                     return None
-                return WebDocument(
-                    title=result.title,
-                    url=final_url,
-                    content_type=cast(WebContentType, content_type),
-                    content=content,
+                return FetchedWebDocument(
+                    title=discovered_result.title,
+                    url=response_url,
+                    content_type=cast(SupportedWebContentType, response_content_type),
+                    content=page_content,
                 )
             except HTTPError as error:
                 retryable_status = (
@@ -85,15 +90,16 @@ class WebPageFetcher:
                 )
                 # Rate limits and server failures may be temporary. Other HTTP
                 # failures are treated as permanent for this retrieval run.
-                if not retryable_status or is_final_attempt:
+                if not retryable_status:
                     return None
-                sleep(WEB_FETCH_RETRY_DELAY_SECONDS)
             except ValueError:
                 # URL-policy failures will not become valid on a retry.
                 return None
-            except (TimeoutError, URLError, OSError):
-                # Retry a transient connection failure within the fixed attempt limit.
-                if is_final_attempt:
-                    return None
-                sleep(WEB_FETCH_RETRY_DELAY_SECONDS)
+            except OSError:
+                # Connection failures use the bounded retry path below.
+                pass
+
+            if is_final_attempt:
+                return None
+            sleep(WEB_FETCH_RETRY_DELAY_SECONDS)
         return None

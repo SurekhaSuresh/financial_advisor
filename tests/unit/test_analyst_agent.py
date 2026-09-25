@@ -12,11 +12,13 @@ from google.adk.tools import AgentTool
 from google.genai import types
 from pydantic import ValidationError
 
-from financial_advisor.agents.analyst import (
-    ANALYST_INSTRUCTION,
-    _finalize_research,
+from financial_advisor.agents.analyst.agent import (
+    TRUSTED_ANALYST_BRIEF_STATE_KEY,
+    _build_grounded_research_brief,
+    _ground_after_model,
     create_analyst_agent,
 )
+from financial_advisor.agents.analyst.prompt import ANALYST_INSTRUCTION
 from financial_advisor.contracts import (
     ClientProfile,
     Evidence,
@@ -27,6 +29,7 @@ from financial_advisor.contracts import (
     RetrievalChannel,
     RetrievalPath,
     RetrievalResult,
+    ScenarioComparison,
 )
 
 
@@ -118,6 +121,27 @@ def test_analyst_prompt_requires_retrieved_evidence_ids() -> None:
     assert "Never invent an evidence ID" in ANALYST_INSTRUCTION
 
 
+def test_grounded_brief_requires_a_supported_finding() -> None:
+    task = research_task()
+
+    with pytest.raises(ValueError, match="no supported findings"):
+        _build_grounded_research_brief(
+            task,
+            findings=[Finding(text="Unsupported finding.", evidence_ids=[uuid4()])],
+            scenario_comparisons=[],
+            evidence=[
+                Evidence(
+                    evidence_id=uuid4(),
+                    title="Source",
+                    publisher="Publisher",
+                    text="Evidence.",
+                    source=RetrievalChannel.WEB,
+                )
+            ],
+            limitations=[],
+        )
+
+
 def test_empty_retrieval_skips_the_analyst_model() -> None:
     task = research_task()
     state: dict[str, object] = {}
@@ -127,8 +151,8 @@ def test_empty_retrieval_skips_the_analyst_model() -> None:
         retrieval_pipeline=cast(Any, pipeline),
     )
 
-    prepare_research = cast(Any, agent.before_model_callback)
-    response = prepare_research(
+    retrieve_before_model = cast(Any, agent.before_model_callback)
+    response = retrieve_before_model(
         callback_context=callback_context(task, state),
         llm_request=LlmRequest(),
     )
@@ -141,6 +165,40 @@ def test_empty_retrieval_skips_the_analyst_model() -> None:
     assert pipeline.calls == [(task.question, task.retrieval_paths)]
 
 
+def test_empty_retrieval_preserves_the_previous_trusted_brief() -> None:
+    task = research_task()
+    evidence = Evidence(
+        evidence_id=uuid4(),
+        title="Previous source",
+        publisher="Investor.gov",
+        text="Previous evidence.",
+        source=RetrievalChannel.WEB,
+    )
+    previous_brief = ResearchBrief(
+        task_id=uuid4(),
+        findings=[
+            Finding(text="Previous supported finding.", evidence_ids=[evidence.evidence_id])
+        ],
+        evidence=[evidence],
+    )
+    state: dict[str, object] = {
+        TRUSTED_ANALYST_BRIEF_STATE_KEY: previous_brief.model_dump(mode="json")
+    }
+    agent = create_analyst_agent(
+        "test-model",
+        retrieval_pipeline=cast(Any, StubRetrievalPipeline()),
+    )
+
+    retrieve_before_model = cast(Any, agent.before_model_callback)
+    response = retrieve_before_model(
+        callback_context=callback_context(task, state),
+        llm_request=LlmRequest(),
+    )
+
+    assert response is not None
+    assert ResearchBrief.model_validate(state[TRUSTED_ANALYST_BRIEF_STATE_KEY]) == previous_brief
+
+
 def test_retrieval_error_propagates_to_the_workflow() -> None:
     task = research_task()
     pipeline = StubRetrievalPipeline(error=ConnectionError("store unavailable"))
@@ -149,9 +207,9 @@ def test_retrieval_error_propagates_to_the_workflow() -> None:
         retrieval_pipeline=cast(Any, pipeline),
     )
 
-    prepare_research = cast(Any, agent.before_model_callback)
+    retrieve_before_model = cast(Any, agent.before_model_callback)
     with pytest.raises(ConnectionError, match="store unavailable"):
-        prepare_research(
+        retrieve_before_model(
             callback_context=callback_context(task, {}),
             llm_request=LlmRequest(),
         )
@@ -173,14 +231,14 @@ def test_invalid_advisor_input_remains_a_tool_failure() -> None:
         ),
     )
 
-    prepare_research = cast(Any, agent.before_model_callback)
+    retrieve_before_model = cast(Any, agent.before_model_callback)
     with pytest.raises(ValidationError):
-        prepare_research(callback_context=context, llm_request=LlmRequest())
+        retrieve_before_model(callback_context=context, llm_request=LlmRequest())
 
 
 def test_invalid_model_output_propagates_to_the_workflow() -> None:
     with pytest.raises(ValidationError):
-        _finalize_research(
+        _ground_after_model(
             callback_context(research_task(), {}),
             LlmResponse(
                 content=types.Content(
@@ -209,7 +267,7 @@ def test_missing_retrieval_state_propagates_to_the_workflow() -> None:
     )
 
     with pytest.raises(RuntimeError, match="retrieval state is missing"):
-        _finalize_research(
+        _ground_after_model(
             callback_context(task, {}),
             LlmResponse(
                 content=types.Content(
@@ -224,7 +282,7 @@ def test_missing_retrieval_state_propagates_to_the_workflow() -> None:
 
 def test_missing_research_brief_propagates_to_the_workflow() -> None:
     with pytest.raises(ValueError, match="did not return a research brief"):
-        _finalize_research(
+        _ground_after_model(
             callback_context(research_task(), {}),
             LlmResponse(
                 content=types.Content(
@@ -258,6 +316,15 @@ def test_analyst_keeps_only_claims_supported_by_retrieval() -> None:
             Finding(text="Preserve near-term liquidity.", evidence_ids=[retrieved.evidence_id]),
             Finding(text="Unsupported claim.", evidence_ids=[fabricated.evidence_id]),
         ],
+        scenario_comparisons=[
+            ScenarioComparison(
+                scenario="Unsupported comparison",
+                summary="This comparison has no retrieved evidence.",
+                benefits=["Unknown benefit."],
+                tradeoffs=["Unknown trade-off."],
+                evidence_ids=[fabricated.evidence_id],
+            )
+        ],
         evidence=[retrieved, fabricated],
     )
     pipeline = StubRetrievalPipeline(
@@ -270,12 +337,14 @@ def test_analyst_keeps_only_claims_supported_by_retrieval() -> None:
         "test-model",
         retrieval_pipeline=cast(Any, pipeline),
     )
-    state: dict[str, object] = {}
+    state: dict[str, object] = {
+        TRUSTED_ANALYST_BRIEF_STATE_KEY: draft_brief.model_dump(mode="json")
+    }
     context = callback_context(task, state)
     llm_request = LlmRequest()
 
-    prepare_research = cast(Any, agent.before_model_callback)
-    assert prepare_research(callback_context=context, llm_request=llm_request) is None
+    retrieve_before_model = cast(Any, agent.before_model_callback)
+    assert retrieve_before_model(callback_context=context, llm_request=llm_request) is None
     assert len(llm_request.contents) == 1
 
     draft_response = LlmResponse(
@@ -290,7 +359,7 @@ def test_analyst_keeps_only_claims_supported_by_retrieval() -> None:
             ],
         )
     )
-    finalized_response = _finalize_research(context, draft_response)
+    finalized_response = _ground_after_model(context, draft_response)
 
     assert finalized_response is not None
     result = ResearchResult.model_validate_json(response_text(finalized_response))
@@ -298,6 +367,11 @@ def test_analyst_keeps_only_claims_supported_by_retrieval() -> None:
     assert result.brief is not None
     assert result.brief.task_id == task.task_id
     assert [finding.text for finding in result.brief.findings] == ["Preserve near-term liquidity."]
+    assert result.brief.scenario_comparisons == []
     assert result.brief.evidence == [retrieved]
     assert result.brief.limitations == ["Current web research was unavailable."]
+    assert (
+        ResearchBrief.model_validate(state[TRUSTED_ANALYST_BRIEF_STATE_KEY])
+        == result.brief
+    )
     assert pipeline.calls == [(task.question, task.retrieval_paths)]

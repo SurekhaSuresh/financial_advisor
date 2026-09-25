@@ -16,22 +16,26 @@ from financial_advisor.config import (
     WEB_CHUNK_MIN_TOKENS,
     WEB_CHUNK_OVERLAP_TOKENS,
 )
-from financial_advisor.contracts import RetrievalChannel, RetrievedEvidenceCandidate
-from financial_advisor.retrieval.documents import (
-    Chunk,
-    Decode,
-    Encode,
+from financial_advisor.contracts import (
+    DocumentChunk,
+    Embed,
+    RetrievalChannel,
+    RetrievedEvidenceCandidate,
+)
+from financial_advisor.retrieval.content_processing import (
+    TokenDecoder,
+    TokenEncoder,
     chunk_document,
     parse_document,
 )
-from financial_advisor.retrieval.providers import (
+from financial_advisor.retrieval.ranking import cosine_similarity
+from financial_advisor.retrieval.web.page_fetch import WebPageFetcher
+from financial_advisor.retrieval.web.providers import (
     SearchProvider,
     WebDiscovery,
     WebError,
     WebResult,
 )
-from financial_advisor.retrieval.ranking import Embed, cosine_similarity
-from financial_advisor.retrieval.web_fetch import WebPageFetcher
 
 
 class WebCandidateRetriever:
@@ -40,8 +44,8 @@ class WebCandidateRetriever:
     def __init__(
         self,
         providers: Sequence[tuple[str, SearchProvider]],
-        encode: Encode,
-        decode: Decode,
+        encode: TokenEncoder,
+        decode: TokenDecoder,
         embed: Embed,
         *,
         result_limit: int = DEFAULT_WEB_RESULT_LIMIT,
@@ -83,8 +87,8 @@ class WebCandidateRetriever:
     def _fetch_and_chunk_pages(
         self,
         discovered_web_results: Sequence[WebResult],
-    ) -> list[Chunk]:
-        web_passages: list[Chunk] = []
+    ) -> list[DocumentChunk]:
+        web_passages: list[DocumentChunk] = []
         seen_urls: set[str] = set()
         chunked_page_count = 0
 
@@ -127,7 +131,7 @@ class WebCandidateRetriever:
     def _rank_passages(
         self,
         normalized_query: str,
-        web_passages: Sequence[Chunk],
+        web_passages: Sequence[DocumentChunk],
     ) -> list[RetrievedEvidenceCandidate]:
         query_and_passage_vectors = self.embed(
             [
