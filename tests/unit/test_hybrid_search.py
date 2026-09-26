@@ -5,7 +5,7 @@ from lancedb.index import FTS
 
 from financial_advisor.config import KNOWLEDGE_TEXT_INDEX_NAME
 from financial_advisor.contracts import RetrievalChannel
-from financial_advisor.retrieval.knowledge_base.hybrid_search import LocalHybridRetriever
+from financial_advisor.retrieval.hybrid_search import LocalHybridRetriever
 
 
 def test_local_hybrid_retriever_returns_both_candidate_channels(

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Sequence
+from datetime import datetime
 from decimal import Decimal
 from enum import StrEnum
 from typing import Literal
@@ -132,7 +133,7 @@ class ScenarioComparison(BaseModel):
 class ResearchBrief(BaseModel):
     """Analyst result assembled from supported claims and selected evidence."""
 
-    task_id: UUID
+    task_id: UUID = Field(default_factory=uuid4)
     findings: list[Finding] = Field(min_length=1)
     scenario_comparisons: list[ScenarioComparison] = Field(default_factory=list)
     evidence: list[Evidence] = Field(min_length=1)
@@ -156,19 +157,21 @@ class RetrievalPath(StrEnum):
 class ResearchTask(BaseModel):
     """One complete research request created by the Advisor."""
 
-    task_id: UUID = Field(default_factory=uuid4)
     question: str = Field(min_length=1, max_length=2_000)
-    client_profile: ClientProfile
-    retrieval_paths: list[RetrievalPath] = Field(min_length=1, max_length=2)
+    client_profile_json: str
+    retrieval_paths: list[str] = Field(min_length=1, max_length=2)
 
     @field_validator("retrieval_paths")
     @classmethod
     def require_unique_retrieval_paths(
         cls,
-        retrieval_paths: list[RetrievalPath],
-    ) -> list[RetrievalPath]:
-        """Prevent the same retrieval path from running twice."""
+        retrieval_paths: list[str],
+    ) -> list[str]:
+        """Require supported retrieval paths without duplicates."""
 
+        supported_paths = {path.value for path in RetrievalPath}
+        if not set(retrieval_paths).issubset(supported_paths):
+            raise ValueError("A research task contains an unsupported retrieval path.")
         if len(retrieval_paths) != len(set(retrieval_paths)):
             raise ValueError("A research task may select each retrieval path only once.")
         return retrieval_paths
@@ -210,11 +213,53 @@ class Recommendation(BaseModel):
     limitations: list[str] = Field(default_factory=list)
 
 
+class ConversationStatus(StrEnum):
+    """The lifecycle state of a financial-advisor conversation."""
+
+    ACTIVE = "active"
+    RESOLVED = "resolved"
+    ESCALATED = "escalated"
+
+
+class ConversationResult(BaseModel):
+    """The terminal result returned to the application."""
+
+    session_id: str
+    status: ConversationStatus
+    recommendation: Recommendation | None = None
+
+
+class ConversationStarted(BaseModel):
+    """Identifier returned after a conversation is scheduled."""
+
+    session_id: str
+    status: ConversationStatus
+
+
+class PersistedSessionEvent(BaseModel):
+    """One ordered ADK event exposed for live progress and replay."""
+
+    sequence: int = Field(ge=1)
+    event_id: str
+    timestamp: datetime
+    author: str
+    event: dict[str, object]
+
+
+class SessionSummary(BaseModel):
+    """Small persisted-session record used by conversation history."""
+
+    session_id: str
+    client_question: str | None
+    updated_at: datetime
+    status: ConversationStatus
+
+
 class ClientTask(BaseModel):
     """One opening or recommendation-review request sent by the Advisor."""
 
-    client_profile: ClientProfile
-    advisor_response: Recommendation | None = None
+    client_profile_json: str
+    advisor_response_json: str | None = None
     follow_up_count: int = Field(default=0, ge=0)
 
 
@@ -230,3 +275,17 @@ class ClientResult(BaseModel):
 
     action: ClientAction
     message: str = Field(min_length=1, max_length=2_000)
+
+
+class SessionSnapshot(BaseModel):
+    """Persisted conversation state and progress used by the UI."""
+
+    session_id: str
+    client_profile: ClientProfile
+    status: ConversationStatus
+    updated_at: datetime
+    client_results: list[ClientResult]
+    recommendations: list[Recommendation]
+    progress_updates: list[str]
+    state: dict[str, object]
+    events: list[PersistedSessionEvent]

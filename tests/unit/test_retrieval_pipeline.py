@@ -90,3 +90,18 @@ def test_pipeline_jointly_selects_local_and_web_with_stable_evidence_ids() -> No
     assert [item.evidence_id for item in first.evidence] == [
         item.evidence_id for item in second.evidence
     ]
+
+
+def test_pipeline_reports_when_selected_local_retrieval_is_not_configured() -> None:
+    pipeline = RetrievalPipeline(
+        local_hybrid_retriever=None,
+        rerank=lambda _query, _documents: [],
+    )
+
+    result = pipeline.retrieve("question", [RetrievalPath.LOCAL_HYBRID])
+
+    assert result.evidence == []
+    assert result.limitations == [
+        "Local knowledge retrieval is not configured.",
+        "Retrieval returned no evidence safe enough to use.",
+    ]

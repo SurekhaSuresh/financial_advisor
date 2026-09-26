@@ -1,9 +1,37 @@
-"""Static configuration shared across the financial-advisor application."""
+"""Application settings and static configuration."""
+
+from pathlib import Path
+
+from pydantic import SecretStr
+from pydantic_settings import BaseSettings, SettingsConfigDict
+
+
+class ApplicationSettings(BaseSettings):
+    """Environment-backed values needed to assemble the application."""
+
+    google_api_key: SecretStr | None = None
+    exa_api_key: SecretStr | None = None
+    brave_search_api_key: SecretStr | None = None
+    advisor_analyst_model_name: str = "gemini-3.5-flash"
+    client_model_name: str = "gemini-3.5-flash-lite"
+    session_database_url: str = "sqlite+aiosqlite:///data/adk_sessions.db"
+    knowledge_database_path: Path | None = None
+    model_cache_directory: Path = Path(".local/model_cache")
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_ignore_empty=True,
+        extra="ignore",
+    )
 
 # Agent policy
 MAX_CLIENT_FOLLOW_UPS = 2
 MAX_RESEARCH_ATTEMPTS = 2
-MAX_INVOCATION_LLM_CALLS = 30
+MAX_ADVISOR_LLM_CALLS = 30
+MODEL_REQUEST_ATTEMPTS = 2
+MODEL_REQUEST_TIMEOUT_MILLISECONDS = 120_000
+MODEL_RETRY_DELAY_SECONDS = 1.0
+CONVERSATION_TIMEOUT_SECONDS = 360.0
 
 # Local model defaults
 EMBEDDING_MODEL_NAME = "BAAI/bge-small-en-v1.5"

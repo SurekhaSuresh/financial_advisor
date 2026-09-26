@@ -1,20 +1,24 @@
 """Evidence-grounded Analyst used as a tool by the Advisor."""
 
+import json
 from functools import partial
 
 from google.adk.agents import LlmAgent
 from google.adk.agents.callback_context import CallbackContext
+from google.adk.models import BaseLlm
 from google.adk.models.llm_request import LlmRequest
 from google.adk.models.llm_response import LlmResponse
 from google.genai import types
 
 from financial_advisor.agents.analyst.prompt import ANALYST_INSTRUCTION
+from financial_advisor.config import MODEL_REQUEST_TIMEOUT_MILLISECONDS
 from financial_advisor.contracts import (
     Evidence,
     Finding,
     ResearchBrief,
     ResearchResult,
     ResearchTask,
+    RetrievalPath,
     RetrievalResult,
     ScenarioComparison,
 )
@@ -25,7 +29,7 @@ TRUSTED_ANALYST_BRIEF_STATE_KEY = "trusted_analyst_brief"
 
 
 def create_analyst_agent(
-    model: str,
+    model: str | BaseLlm,
     retrieval_pipeline: RetrievalPipeline,
 ) -> LlmAgent:
     """Create an Analyst that skips the model when retrieval finds no evidence."""
@@ -42,6 +46,11 @@ def create_analyst_agent(
             retrieval_pipeline=retrieval_pipeline,
         ),
         after_model_callback=_ground_after_model,
+        generate_content_config=types.GenerateContentConfig(
+            http_options=types.HttpOptions(
+                timeout=MODEL_REQUEST_TIMEOUT_MILLISECONDS,
+            )
+        ),
     )
 
 
@@ -60,7 +69,7 @@ def _retrieve_before_model(
 
     retrieval_result = retrieval_pipeline.retrieve(
         research_task.question,
-        research_task.retrieval_paths,
+        [RetrievalPath(path) for path in research_task.retrieval_paths],
     )
 
     if not retrieval_result.evidence:
@@ -101,27 +110,25 @@ def _ground_after_model(
     model_content = llm_response.content
     response_parts = model_content.parts if model_content and model_content.parts else []
     model_output_json = "".join(part.text or "" for part in response_parts if not part.thought)
-
-    model_draft = ResearchResult.model_validate_json(model_output_json)
-    draft_brief = model_draft.brief
-    if draft_brief is None:
+    model_output = json.loads(model_output_json)
+    draft_brief_data = model_output.get("brief")
+    if not isinstance(draft_brief_data, dict):
         raise ValueError("The Analyst did not return a research brief.")
-
-    if callback_context.user_content is None or callback_context.user_content.parts is None:
-        raise ValueError("The Analyst requires a ResearchTask input.")
-    task_json = "".join(part.text or "" for part in callback_context.user_content.parts)
-    research_task = ResearchTask.model_validate_json(task_json)
 
     stored_retrieval_data = callback_context.state.get(_TRUSTED_RETRIEVAL_STATE_KEY)
     if stored_retrieval_data is None:
         raise RuntimeError("The Analyst's trusted retrieval state is missing.")
 
     current_retrieval = RetrievalResult.model_validate(stored_retrieval_data)
+    draft_brief_data["evidence"] = current_retrieval.model_dump(mode="json")["evidence"]
+    draft_brief = ResearchResult.model_validate(model_output).brief
+    if draft_brief is None:
+        raise ValueError("The Analyst did not return a research brief.")
+
     combined_limitations = list(
         dict.fromkeys(draft_brief.limitations + current_retrieval.limitations)
     )
     trusted_brief = _build_grounded_research_brief(
-        research_task,
         findings=draft_brief.findings,
         scenario_comparisons=draft_brief.scenario_comparisons,
         evidence=current_retrieval.evidence,
@@ -143,7 +150,6 @@ def _ground_after_model(
 
 
 def _build_grounded_research_brief(
-    task: ResearchTask,
     findings: list[Finding],
     scenario_comparisons: list[ScenarioComparison],
     evidence: list[Evidence],
@@ -166,7 +172,6 @@ def _build_grounded_research_brief(
         if set(comparison.evidence_ids).issubset(available_evidence_ids)
     ]
     return ResearchBrief(
-        task_id=task.task_id,
         findings=supported_findings,
         scenario_comparisons=supported_comparisons,
         evidence=evidence,

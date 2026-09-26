@@ -1,3 +1,4 @@
+import json
 from collections.abc import Sequence
 from decimal import Decimal
 from types import SimpleNamespace
@@ -19,6 +20,7 @@ from financial_advisor.agents.analyst.agent import (
     create_analyst_agent,
 )
 from financial_advisor.agents.analyst.prompt import ANALYST_INSTRUCTION
+from financial_advisor.config import MAX_EVIDENCE_TEXT_LENGTH
 from financial_advisor.contracts import (
     ClientProfile,
     Evidence,
@@ -57,7 +59,7 @@ class StubRetrievalPipeline:
 def research_task() -> ResearchTask:
     return ResearchTask(
         question="How should I balance liquidity and investing?",
-        client_profile=ClientProfile(
+        client_profile_json=ClientProfile(
             name="Maya Chen",
             age=38,
             risk_tolerance="moderate",
@@ -68,7 +70,7 @@ def research_task() -> ResearchTask:
             student_loan_rate_percent=Decimal("5.8"),
             primary_goal="Buy a home",
             goal_time_horizon_years=5,
-        ),
+        ).model_dump_json(),
         retrieval_paths=[RetrievalPath.LOCAL_HYBRID, RetrievalPath.WEB],
     )
 
@@ -122,11 +124,8 @@ def test_analyst_prompt_requires_retrieved_evidence_ids() -> None:
 
 
 def test_grounded_brief_requires_a_supported_finding() -> None:
-    task = research_task()
-
     with pytest.raises(ValueError, match="no supported findings"):
         _build_grounded_research_brief(
-            task,
             findings=[Finding(text="Unsupported finding.", evidence_ids=[uuid4()])],
             scenario_comparisons=[],
             evidence=[
@@ -237,7 +236,7 @@ def test_invalid_advisor_input_remains_a_tool_failure() -> None:
 
 
 def test_invalid_model_output_propagates_to_the_workflow() -> None:
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValueError):
         _ground_after_model(
             callback_context(research_task(), {}),
             LlmResponse(
@@ -249,11 +248,57 @@ def test_invalid_model_output_propagates_to_the_workflow() -> None:
         )
 
 
+def test_grounding_replaces_model_evidence_before_validation() -> None:
+    task = research_task()
+    evidence = Evidence(
+        evidence_id=uuid4(),
+        title="Liquidity guidance",
+        publisher="Investor.gov",
+        text="Preserve liquidity for near-term goals.",
+        source=RetrievalChannel.VECTOR,
+    )
+    pipeline = StubRetrievalPipeline(RetrievalResult(evidence=[evidence]))
+    context = callback_context(task, {})
+    agent = create_analyst_agent("test-model", cast(Any, pipeline))
+    retrieve_before_model = cast(Any, agent.before_model_callback)
+    assert retrieve_before_model(context, LlmRequest()) is None
+
+    model_output = ResearchResult(
+        success=True,
+        brief=ResearchBrief(
+            findings=[
+                Finding(
+                    text="Preserve liquidity.",
+                    evidence_ids=[evidence.evidence_id],
+                )
+            ],
+            evidence=[evidence],
+        ),
+    ).model_dump(mode="json")
+    model_output["brief"]["evidence"][0]["text"] = "x" * (
+        MAX_EVIDENCE_TEXT_LENGTH + 1
+    )
+
+    response = _ground_after_model(
+        context,
+        LlmResponse(
+            content=types.Content(
+                role="model",
+                parts=[types.Part.from_text(text=json.dumps(model_output))],
+            )
+        ),
+    )
+
+    result = ResearchResult.model_validate_json(response_text(response))
+    assert result.brief is not None
+    assert result.brief.evidence == [evidence]
+
+
 def test_missing_retrieval_state_propagates_to_the_workflow() -> None:
     task = research_task()
     evidence_id = uuid4()
     brief = ResearchBrief(
-        task_id=task.task_id,
+        task_id=uuid4(),
         findings=[Finding(text="Supported finding.", evidence_ids=[evidence_id])],
         evidence=[
             Evidence(
@@ -365,7 +410,7 @@ def test_analyst_keeps_only_claims_supported_by_retrieval() -> None:
     result = ResearchResult.model_validate_json(response_text(finalized_response))
     assert result.success is True
     assert result.brief is not None
-    assert result.brief.task_id == task.task_id
+    assert result.brief.task_id
     assert [finding.text for finding in result.brief.findings] == ["Preserve near-term liquidity."]
     assert result.brief.scenario_comparisons == []
     assert result.brief.evidence == [retrieved]

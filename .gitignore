@@ -12,15 +12,11 @@ coverage.xml
 
 # Generated application data
 .local/
-data/source_snapshots/
-data/lancedb/
-data/financial_advisor.db
-frontend/data/financial_advisor.db
+knowledge_base/data/snapshots/
+knowledge_base/data/lancedb/
+data/adk_sessions.db
 
 # Generated frontend dependencies and build output
 frontend/node_modules/
 frontend/dist/
 frontend/.npm-cache/
-old/frontend/node_modules/
-old/frontend/dist/
-old/frontend/.npm-cache/

@@ -1,21 +1,20 @@
 import json
 from hashlib import sha256
 from http import HTTPStatus
-from io import BytesIO
 from pathlib import Path
 from typing import Any, cast
-from urllib.error import HTTPError
 
+import httpx
 import lancedb
 import pytest
 
 from financial_advisor.config import KNOWLEDGE_TEXT_INDEX_NAME
-from financial_advisor.retrieval.knowledge_base import offline_ingestion
-from financial_advisor.retrieval.knowledge_base.offline_ingestion import (
+from financial_advisor.retrieval.text_models import LocalRetrievalModels
+from knowledge_base import offline_ingestion
+from knowledge_base.offline_ingestion import (
     fetch_snapshots,
     ingest_snapshots,
 )
-from financial_advisor.retrieval.text_models import LocalRetrievalModels
 
 
 class Models:
@@ -49,26 +48,29 @@ def test_fetch_snapshots_retries_transient_http_errors(
 ) -> None:
     manifest = tmp_path / "sources.yaml"
     write_manifest(manifest)
-    responses: list[HTTPError | BytesIO] = [
-        HTTPError(
-            "https://www.investor.gov/test",
+    request = httpx.Request("GET", "https://www.investor.gov/test")
+    responses = [
+        httpx.Response(
             HTTPStatus.SERVICE_UNAVAILABLE,
-            "unavailable",
-            hdrs=None,
-            fp=None,
+            request=request,
         ),
-        BytesIO(b"snapshot"),
+        httpx.Response(HTTPStatus.OK, content=b"snapshot", request=request),
     ]
     retry_delays: list[float] = []
 
-    def fake_urlopen(_request: object, *, timeout: float) -> BytesIO:
+    def fake_get(
+        _url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+    ) -> httpx.Response:
+        assert headers
         assert timeout > 0
-        response = responses.pop(0)
-        if isinstance(response, HTTPError):
-            raise response
-        return response
+        assert follow_redirects
+        return responses.pop(0)
 
-    monkeypatch.setattr(offline_ingestion, "urlopen", fake_urlopen)
+    monkeypatch.setattr(offline_ingestion.httpx, "get", fake_get)
     monkeypatch.setattr(offline_ingestion, "sleep", retry_delays.append)
 
     written_paths = fetch_snapshots(manifest, tmp_path / "snapshots")
@@ -85,21 +87,26 @@ def test_fetch_snapshots_does_not_retry_permanent_http_errors(
     write_manifest(manifest)
     request_count = 0
 
-    def reject_request(_request: object, *, timeout: float) -> BytesIO:
+    def reject_request(
+        url: str,
+        *,
+        headers: dict[str, str],
+        timeout: float,
+        follow_redirects: bool,
+    ) -> httpx.Response:
         nonlocal request_count
+        assert headers
         assert timeout > 0
+        assert follow_redirects
         request_count += 1
-        raise HTTPError(
-            "https://www.investor.gov/test",
+        return httpx.Response(
             HTTPStatus.NOT_FOUND,
-            "not found",
-            hdrs=None,
-            fp=None,
+            request=httpx.Request("GET", url),
         )
 
-    monkeypatch.setattr(offline_ingestion, "urlopen", reject_request)
+    monkeypatch.setattr(offline_ingestion.httpx, "get", reject_request)
 
-    with pytest.raises(HTTPError):
+    with pytest.raises(httpx.HTTPStatusError):
         fetch_snapshots(manifest, tmp_path / "snapshots")
 
     assert request_count == 1

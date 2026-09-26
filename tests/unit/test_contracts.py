@@ -60,7 +60,7 @@ def test_research_task_requires_unique_retrieval_paths() -> None:
     with pytest.raises(ValidationError, match="each retrieval path only once"):
         ResearchTask(
             question="Research current guidance.",
-            client_profile=profile(),
+            client_profile_json=profile().model_dump_json(),
             retrieval_paths=[
                 RetrievalPath.WEB,
                 RetrievalPath.WEB,

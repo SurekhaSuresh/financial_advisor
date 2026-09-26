@@ -10,6 +10,7 @@ dependencies = [
   "fastapi>=0.115,<1.0",
   "google-adk>=1.0,<2.0",
   "greenlet>=3.0,<4.0",
+  "httpx>=0.28,<1.0",
   "lancedb>=0.19,<1.0",
   "pydantic-settings>=2.7,<3.0",
   "pypdf>=5.0,<6.0",
@@ -20,7 +21,6 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-  "httpx>=0.28,<1.0",
   "mypy>=1.14,<2.0",
   "pytest>=8.3,<9.0",
   "ruff>=0.9,<1.0",
@@ -34,6 +34,7 @@ build-backend = "hatchling.build"
 [tool.pytest.ini_options]
 addopts = "-q"
 testpaths = ["tests"]
+pythonpath = ["."]
 
 [tool.ruff]
 line-length = 100

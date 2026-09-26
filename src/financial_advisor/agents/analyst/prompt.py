@@ -10,5 +10,5 @@ Every finding and scenario comparison must cite one or more provided evidence ID
 Never invent an evidence ID, source, fact, calculation, or quotation. Preserve the
 retrieved Evidence records without changing their fields. State missing or conflicting
 information in limitations. Return a complete standalone ResearchBrief that answers the
-entire research question and preserves the task_id.
+entire research question.
 """

@@ -11,7 +11,7 @@ from financial_advisor.contracts import (
     RetrievalResult,
     RetrievedEvidenceCandidate,
 )
-from financial_advisor.retrieval.knowledge_base.hybrid_search import LocalHybridRetriever
+from financial_advisor.retrieval.hybrid_search import LocalHybridRetriever
 from financial_advisor.retrieval.ranking import select_evidence_candidates
 from financial_advisor.retrieval.web.web_search import WebCandidateRetriever
 
@@ -21,7 +21,7 @@ class RetrievalPipeline:
 
     def __init__(
         self,
-        local_hybrid_retriever: LocalHybridRetriever,
+        local_hybrid_retriever: LocalHybridRetriever | None,
         rerank: Rerank,
         web_candidate_retriever: WebCandidateRetriever | None = None,
         *,
@@ -47,10 +47,15 @@ class RetrievalPipeline:
         candidates: list[RetrievedEvidenceCandidate] = []
         limitations: list[str] = []
         if RetrievalPath.LOCAL_HYBRID in paths:
-            local_candidates = self.local_hybrid_retriever.search(query)
-            candidates.extend(local_candidates)
-            if not local_candidates:
-                limitations.append("The local knowledge store returned no usable evidence.")
+            if self.local_hybrid_retriever is None:
+                limitations.append("Local knowledge retrieval is not configured.")
+            else:
+                local_candidates = self.local_hybrid_retriever.search(query)
+                candidates.extend(local_candidates)
+                if not local_candidates:
+                    limitations.append(
+                        "The local knowledge store returned no usable evidence."
+                    )
 
         if RetrievalPath.WEB in paths:
             if self.web_candidate_retriever is None:
